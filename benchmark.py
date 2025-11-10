@@ -317,6 +317,15 @@ def print_precision_info(args, device):
 
 def main():
 
+    print(f"Before empty_cache GPU memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+    
+    # Clear any existing cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    # Set memory allocation config
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
     args = parse_arguments()
 
     torch.manual_seed(args.seed)
@@ -354,6 +363,8 @@ def main():
 
     x, y = make_batch(args.batch_size, args.context_length, args.vocab_size, device)
 
+    print(f"Before benchmark GPU memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+    
     times, _ = benchmark(
         model=model,
         x=x,
