@@ -92,41 +92,48 @@ def benchmark_attention(attention_fn, batch_size, d_k, seq_len,
     }
 
 
-def benchmark_transformer(model, batch_size, context_length, vocab_size,
-                         num_iterations=10, warmup_iterations=5, device='cuda'):
-    """Benchmark a transformer model"""
-    
-    # Create data
+def benchmark_transformer_fixed(model, batch_size, context_length, vocab_size,
+                               num_iterations=10, warmup_iterations=10, device='cuda', is_compiled=False):
     x = torch.randint(0, vocab_size, (batch_size, context_length), device=device)
     y = torch.randint(0, vocab_size, (batch_size, context_length), device=device)
-    
-    # Create optimizer
     optimizer = AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)
     
-    # Warmup
-    for _ in range(warmup_iterations):
-        optimizer.zero_grad()
-        logits = model(x)
-        loss = cross_entropy(logits, y)
-        loss.backward()
-        optimizer.step()
-        if device == 'cuda':
-            torch.cuda.synchronize()
-        elif device == 'mps':
-            torch.mps.synchronize()
+    # REMOVE model.eval() - stay in training mode
+    # model.eval()  # DELETE THIS
     
-    # Time forward pass
+    # Warmup for compiled models - in TRAINING mode
+    if is_compiled:
+        # Warmup with gradients (training mode)
+        for _ in range(warmup_iterations * 3):  # Extra warmup
+            optimizer.zero_grad()
+            logits = model(x)
+            loss = cross_entropy(logits, y)
+            loss.backward()
+            optimizer.step()
+            if device == 'cuda':
+                torch.cuda.synchronize()
+    else:
+        # Normal warmup for uncompiled
+        for _ in range(warmup_iterations):
+            optimizer.zero_grad()
+            logits = model(x)
+            loss = cross_entropy(logits, y)
+            loss.backward()
+            optimizer.step()
+            if device == 'cuda':
+                torch.cuda.synchronize()
+    
+    # Time forward pass - IN TRAINING MODE (no torch.no_grad())
     forward_times = []
     for _ in range(num_iterations):
-        if device in ['cuda', 'mps']:
-            torch.cuda.synchronize() if device == 'cuda' else torch.mps.synchronize()
+        if device == 'cuda':
+            torch.cuda.synchronize()
         
         start = time.perf_counter()
-        with torch.no_grad():
-            logits = model(x)
+        logits = model(x)  # No torch.no_grad()
         
-        if device in ['cuda', 'mps']:
-            torch.cuda.synchronize() if device == 'cuda' else torch.mps.synchronize()
+        if device == 'cuda':
+            torch.cuda.synchronize()
         
         forward_times.append(time.perf_counter() - start)
     
@@ -294,8 +301,9 @@ def part_b_transformer_benchmark():
                 rope_theta=rope_theta
             ).to(device)
             
-            vanilla = benchmark_transformer(
-                model_vanilla, cfg['batch_size'], cfg['context_length'], vocab_size, device=device
+            vanilla = benchmark_transformer_fixed(
+                model_vanilla, cfg['batch_size'], cfg['context_length'], 
+                vocab_size, device=device, is_compiled=False  # Added flag
             )
             
             # Clean up
@@ -317,8 +325,9 @@ def part_b_transformer_benchmark():
             
             model_compiled = torch.compile(model_compiled)
             
-            compiled = benchmark_transformer(
-                model_compiled, cfg['batch_size'], cfg['context_length'], vocab_size, device=device
+            compiled = benchmark_transformer_fixed(
+                model_compiled, cfg['batch_size'], cfg['context_length'], 
+                vocab_size, device=device, is_compiled=True  # Added flag
             )
             
             # Calculate speedups
