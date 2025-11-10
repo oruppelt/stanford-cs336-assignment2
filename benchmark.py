@@ -37,7 +37,7 @@ def parse_arguments():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     # Mixed precision settings
-    parser.add_argument("--use_mixed_precision", action="store_true", 
+    parser.add_argument("--use_mixed_precision", action="store_true",
                         help="Enable mixed precision training with BF16")
     parser.add_argument("--precision", type=str, default="bf16", choices=["bf16", "fp16"],
                         help="Precision type for mixed precision (bf16 recommended)")
@@ -233,7 +233,8 @@ def synchronize_if_cuda(device: torch.device):
     if device == "cuda":
         torch.cuda.synchronize()
 
-def benchmark(model, x, y, mode: str, warmup_steps: int, measure_steps: int, device: torch.device, autocast_context, optimizer=None, grad_scaler=None):
+def benchmark(model, x, y, mode: str, warmup_steps: int, measure_steps: int, device: torch.device, autocast_context,
+              optimizer=None, grad_scaler=None):
     # Warm-up (not timed)
     Nvtx.push("warmup")
 
